@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+    <link rel="stylesheet" type="text/css" href="stylesheet1.css">
+    <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro&display=swap" rel="stylesheet">
+</head>
+<title>Pavana-SGD</title>
+<body>
+  <h2>Slate Gun Deaths</h2>
+  <p>
+    The following visulaization represents the Gun deaths accross United states over the years 2012 and 2013.
+    <ul>
+        <li>Hover the mouse over states for names and deaths and click on them for the zoomed in view of states. </li>
+        <li>Hover the mouse over cities for names and deaths.</li>
+    </ul>
+  </p>
+  
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script>
+
+//Map dimensions (in pixels)
+var width = 700,
+    height = 500;
+    active = d3.select(null);
+
+
+//Map projection
+var projection = d3.geoAlbersUsa()
+    .scale(900.4855768620193)
+    .translate([width/2,height/2]) //translate to center the map in view
+
+//Generate paths based on projection
+var path = d3.geoPath()
+    .projection(projection);
+
+//Create an SVG
+var svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+//Group for the map features
+var features = svg.append("g")
+    .attr("class","features")
+    .style("stroke-width", "1.5px");
+
+//Group for the city features
+var city_frequency = svg.append("g")
+    .attr("class","city_frequency")
+    .style("stroke-width", "0.5px");
+
+//Create choropleth scale
+var color = d3.scaleSequential(d3.interpolateBlues).domain([0.0,1500.0]);
+
+//Setup the ledger.
+var ledgerSvg = d3.select("body").append("svg")
+    .attr('width', 100)
+    .attr('height', 350)
+    .attr('transform', 'translate(' + 120 + ',' +
+    -30 + ')');
+
+var defs = ledgerSvg.append("defs");
+
+var linearGradient = defs.append("linearGradient")
+    .attr("id", "linear-gradient")
+    .attr("gradientTransform", "rotate(90)");
+
+linearGradient.selectAll("stop")
+  .data(color.ticks().map((t, i, n) => ({ offset: `${100*i/n.length}%`, color: color(t) })))
+  .enter().append("stop")
+  .attr("offset", d => d.offset)
+  .attr("stop-color", d => d.color);
+
+ledgerSvg.append('g')
+  .attr("transform", `translate(0,5)`)
+  .append("rect")
+  .attr('transform', `translate(0,5)`)
+	.attr("width", 50)
+	.attr("height", 300)
+	.style("fill", "url(#linear-gradient)");
+
+var ledgerscale = d3.scaleLinear()
+  .range([5, 305])
+  .domain(color.domain());
+
+var ledgeraxis = d3.axisRight()
+  .scale(ledgerscale)
+  .tickSize(8)
+  .ticks(10);
+
+ledgerSvg
+    .append("g")
+    .attr("class", "axis")
+    .attr("transform", "translate(" + (52) + "," + (5) + ")")
+    .call(ledgeraxis);
+
+
+// Setup tooltips
+var tooltip_state = d3.select("body").append("div")
+  .attr("class", "tooltip")
+  .style("position", "absolute")
+  .style("z-index", "10")
+  .style("opacity", 0.0)
+  .style("background", "#C9C6C6");
+
+var tooltip_city = d3.select("body").append("div")
+  .attr("class", "tooltip")
+  .style("position", "absolute")
+  .style("z-index", "10")
+  .style("opacity", 0.0)
+  .style("background","white");
+
+
+
+d3.json("us_final_states.geojson").then(function(geodata) {
+  
+  //Create a path for each map feature in the data
+  features.selectAll("path")
+    .data(geodata.features)
+    .enter()
+    .append("path")
+    .attr("d",path)
+    .style("fill", function(d){
+    try{
+      var rate = d.properties.total;
+      return color(rate);}
+    catch(error){return 0;}
+  })
+    .on("mouseover", function(d){
+      return tooltip_state.style("opacity",0.85).html("State: "+d.properties.name+"<br>Deaths: "+d.properties.total+"<br>Males:"+d.properties.males+"<br>Females:"+d.properties.females)})
+    .on("mousemove", function(d){
+          return tooltip_state.style("top", (d3.event.pageY-10)+"px").style("left",(d3.event.pageX+10)+"px");
+        })
+    .on("mouseout", function(d){
+          return tooltip_state.style("opacity", 0.0);
+        })
+    .on("click",clicked)
+
+});
+
+
+d3.json("freq_by_city.geojson").then(function(geodata){
+  city_frequency.selectAll("circle")
+    .data(geodata.features)
+    .enter()
+    .append("circle")
+		.attr("transform", function(d) { return "translate(" + path.centroid(d) + ")"; })
+    .attr("r", function(d){ return radius(d.properties.total) })
+    .attr("fill-opacity", function(d){
+      if(d.properties.total<=70){
+        return 0.6;
+      }
+      else if(d.properties.total<=140){
+        return 0.5;
+      }
+      else if(d.properties.total<=210){
+        return 0.4;
+      }
+      else if(d.properties.total<=280){
+        return 0.3;
+      }
+      else if(d.properties.total<=350){
+        return 0.25;
+      }
+      else if(d.properties.total>=350){
+        return 0.2;
+      }
+    })
+    .attr("fill", "#ee179c")
+    .attr("stroke", "white")
+    .on("mouseover", function(d){
+      return tooltip_city.style("opacity",0.85).html("City: "+d.properties.city+"<br>Deaths: "+d.properties.total+"<br>Males:"+d.properties.males+"<br>Females:"+d.properties.females)})
+    .on("mousemove", function(d){
+          return tooltip_city.style("top", (d3.event.pageY-10)+"px").style("left",(d3.event.pageX+10)+"px");
+        })
+    .on("mouseout", function(d){
+          return tooltip_city.style("opacity", 0.0);
+        })
+})
+
+function radius(d)
+{
+	if (d <= 10)
+	{
+		return 2;
+	}
+	else
+	{
+		return Math.sqrt(d);
+	}
+};
+
+
+// Add optional onClick events for features here
+// d.properties contains the attributes (e.g. d.properties.name, d.properties.population)
+function clicked(d,i,) {
+ if (active.node() === this) return reset();
+  active.classed("active", false);
+  active = d3.select(this).classed("active", true);
+
+  var bounds = path.bounds(d),
+      dx = bounds[1][0] - bounds[0][0],
+      dy = bounds[1][1] - bounds[0][1],
+      x = (bounds[0][0] + bounds[1][0]) / 2,
+      y = (bounds[0][1] + bounds[1][1]) / 2,
+      scale = .9 / Math.max(dx / width, dy / height),
+      translate = [width / 2 - scale * x, height / 2 - scale * y];
+
+  features.transition()
+      .duration(750)
+      .style("stroke-width", 1.5 / scale + "px")
+      .attr("transform", "translate(" + translate + ")scale(" + scale + ")");
+
+  city_frequency.transition()
+    .duration(750)
+    .style("stroke-width", 1.5 / scale + "px")
+    .attr("transform", "translate(" + translate + ")scale(" + scale + ")");
+
+}
+
+
+//Update map on zoom/pan
+function zoomed() {
+ 
+}
+
+
+function reset() {
+  active.classed("active", false);
+  active = d3.select(null);
+
+  features.transition()
+      .duration(750)
+      .style("stroke-width", "1.5px")
+      .attr("transform", "");
+
+  city_frequency.transition()
+      .duration(750)
+      .style("stroke-width", "0.5px")
+      .attr("transform", "");
+
+}
+
+
+//Position of the tooltip relative to the cursor
+var tooltipOffset = {x: 5, y: -25};
+
+//Create a tooltip, hidden at the start
+function showTooltip(d) {
+return tooltip_state.style("opacity",0.85).html("State: "
+      +d.properties.name+"<br>Deaths: "+d.properties.total)
+}
+
+//Move the tooltip to track the mouse
+function moveTooltip() {
+return tooltip_state.style("top", (d3.event.pageY-10)+"px").style("left",(d3.event.pageX+10)+"px");
+  
+}
+
+//Create a tooltip, hidden at the start
+function hideTooltip() {
+return tooltip_state.style("opacity", 0.0);
+}
+
+</script>
+<h2>
+    Resources
+</h2>
+  <p style="font-size: 1.5em">
+      This project was built using several Open Source components. The source code of these open source components along with license information can be found below.
+      We acknowledge and are grateful to these developers for their contributions to the open source community.
+      <ul>
+        <li>
+            <a href="https://github.com/d3/d3" >d3js </a>
+        </li>
+        <li>
+          <a href="http://mapstarter.com/">mapstarter</a>
+        </li>
+        <li>
+          <a href="https://observablehq.com/@d3/sequential-scales">sequential-scales</a>
+        </li>
+        <li>
+          <a href="https://colab.research.google.com/drive/1WY7O3mBnO5-SsyBuRWMAjScEkd6WEifX#scrollTo=R1Kmmsnq3IXF">pandas</a>
+        </li>
+      </ul>
+  </p>
+</body>
